@@ -133,6 +133,7 @@ MAKE_FUNCTIONS = {
     'nmmo3': 'NMMO3',
     'snake': 'Snake',
     'squared': 'Squared',
+    'swerve': 'Swerve',
     'pysquared': 'PySquared',
     'connect4': 'Connect4',
     'g2048': 'G2048',
