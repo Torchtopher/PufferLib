@@ -1,4 +1,4 @@
-'''A swerve drive environment with two robots navigating to different goals while avoiding collision.'''
+'''A swerve environment with three robots navigating to different goals while avoiding collision.'''
 
 import gymnasium
 import numpy as np
@@ -7,27 +7,37 @@ import pufferlib
 from pufferlib.ocean.swerve import binding
 
 class Swerve(pufferlib.PufferEnv):
-    def __init__(self, num_envs=1, render_mode=None, log_interval=128, max_episode_steps=1000, buf=None, seed=0):
-        # Each robot observes: [x, y, theta, vx, vy, omega, goal_x, goal_y, other_robot_x, other_robot_y, other_goal_x, other_goal_y]
-        # So observation space is 12 dimensions per robot, 2 robots = 24 total
+    def __init__(self, num_envs=1, num_agents=6, render_mode=None, log_interval=128, 
+                 max_episode_steps=1000, buf=None, seed=0):
+        # Multi-agent environment: each agent has its own observation and action
+        # Each robot observes: [goal_dx, goal_dy, goal_angle_diff, vx, vy, omega, other1_dx, other1_dy, other1_dvx, other1_dvy, other2_dx, other2_dy, other2_dvx, other2_dvy]
+        # Total observation: 14 dimensions per agent
         self.single_observation_space = gymnasium.spaces.Box(
-            low=-1.0, high=1.0, shape=(24,), dtype=np.float32)
+            low=-1.0, high=1.0, shape=(14,), dtype=np.float32)
         
-        # Action space: [x_vel, y_vel, omega] for each robot = 6 actions total
+        # Action space: [x_vel, y_vel, omega] per agent
         self.single_action_space = gymnasium.spaces.Box(
-            low=np.array([-2.0, -2.0, -3.14, -2.0, -2.0, -3.14]), 
-            high=np.array([2.0, 2.0, 3.14, 2.0, 2.0, 3.14]), 
-            dtype=np.float32)
+            low=-2.0, high=2.0, shape=(3,), dtype=np.float32)
         
         self.render_mode = render_mode
-        self.num_agents = num_envs
-        self.max_episode_steps = max_episode_steps
+        self.num_agents = num_envs * num_agents  # Total agents across all environments
         self.log_interval = log_interval
+        self.agents_per_env = num_agents
 
         super().__init__(buf)
-        self.c_envs = binding.vec_init(self.observations, self.actions, self.rewards,
-            self.terminals, self.truncations, num_envs, seed, max_episode_steps=max_episode_steps)
- 
+        c_envs = []
+        for i in range(num_envs):
+            c_env = binding.env_init(
+                self.observations[i*num_agents:(i+1)*num_agents],
+                self.actions[i*num_agents:(i+1)*num_agents],
+                self.rewards[i*num_agents:(i+1)*num_agents],
+                self.terminals[i*num_agents:(i+1)*num_agents],
+                self.truncations[i*num_agents:(i+1)*num_agents],
+                seed, max_episode_steps=max_episode_steps, num_agents=num_agents)
+            c_envs.append(c_env)
+
+        self.c_envs = binding.vectorize(*c_envs)
+
     def reset(self, seed=0):
         binding.vec_reset(self.c_envs, seed)
         self.tick = 0
@@ -38,10 +48,11 @@ class Swerve(pufferlib.PufferEnv):
         self.actions[:] = actions
         binding.vec_step(self.c_envs)
         
+        info = []
         if self.tick % self.log_interval == 0:
-            info = [binding.vec_log(self.c_envs)]
-        else:
-            info = [{}]
+            log = binding.vec_log(self.c_envs)
+            if log:
+                info.append(log)
             
         return (self.observations, self.rewards,
             self.terminals, self.truncations, info)
@@ -53,18 +64,22 @@ class Swerve(pufferlib.PufferEnv):
         binding.vec_close(self.c_envs)
 
 if __name__ == '__main__':
-    N = 4096
-    env = Swerve(num_envs=N)
+    N = 512
+    num_agents = 3
+
+    env = Swerve(num_envs=N, num_agents=num_agents)
     env.reset()
     steps = 0
 
     CACHE = 1024
-    actions = np.random.uniform(-1.0, 1.0, (CACHE, N, 6))
+    actions = np.random.uniform(-1.0, 1.0, (CACHE, 3))
 
+    i = 0
     import time
     start = time.time()
     while time.time() - start < 10:
-        env.step(actions[steps % CACHE])
-        steps += 1
+        env.step(actions[i % CACHE])
+        steps += env.num_agents
+        i += 1
 
-    print('Swerve SPS:', int(env.num_agents*steps / (time.time() - start)))
+    print('Swerve SPS:', int(steps / (time.time() - start)))

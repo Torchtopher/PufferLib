@@ -4,10 +4,10 @@ int main() {
     Swerve env = {0};
     
     // Initialize observation and action buffers
-    float observations[24] = {0}; // 12 observations per agent * 2 agents
-    float actions[6] = {0};       // 3 actions per agent * 2 agents  
-    float rewards[2] = {0};       // 1 reward per agent
-    unsigned char terminals[2] = {0}; // 1 terminal per agent
+    float observations[42] = {0}; // 14 observations per agent * 3 agents (with relative velocities!)
+    float actions[9] = {0};       // 3 actions per agent * 3 agents  
+    float rewards[1] = {0};       // 1 reward per environment (not per robot)
+    unsigned char terminals[1] = {0}; // 1 terminal per environment
     
     env.observations = observations;
     env.actions = actions;
@@ -21,7 +21,7 @@ int main() {
     while (!WindowShouldClose()) {
         // Simple keyboard controls for testing
         if (IsKeyDown(KEY_LEFT_SHIFT)) {
-            // Manual control for robot 1
+            // Manual control for robot 1 (WASD + QE)
             if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT)) {
                 env.actions[0] = -1.0f; // move left
                 env.actions[1] = 0.0f;
@@ -34,17 +34,20 @@ int main() {
             } else if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN)) {
                 env.actions[0] = 0.0f;
                 env.actions[1] = 1.0f; // move down
-            } else if (IsKeyDown(KEY_Q)) {
+            } else {
+                env.actions[0] = 0.0f;
+                env.actions[1] = 0.0f;
+            }
+            
+            if (IsKeyDown(KEY_Q)) {
                 env.actions[2] = -1.0f; // rotate left
             } else if (IsKeyDown(KEY_E)) {
                 env.actions[2] = 1.0f; // rotate right
             } else {
-                env.actions[0] = 0.0f;
-                env.actions[1] = 0.0f;
                 env.actions[2] = 0.0f;
             }
             
-            // Manual control for robot 2 with arrow keys
+            // Manual control for robot 2 (IJKL + UO)
             if (IsKeyDown(KEY_J)) {
                 env.actions[3] = -1.0f; // move left
                 env.actions[4] = 0.0f;
@@ -57,18 +60,26 @@ int main() {
             } else if (IsKeyDown(KEY_K)) {
                 env.actions[3] = 0.0f;
                 env.actions[4] = 1.0f; // move down
-            } else if (IsKeyDown(KEY_U)) {
+            } else {
+                env.actions[3] = 0.0f;
+                env.actions[4] = 0.0f;
+            }
+            
+            if (IsKeyDown(KEY_U)) {
                 env.actions[5] = -1.0f; // rotate left
             } else if (IsKeyDown(KEY_O)) {
                 env.actions[5] = 1.0f; // rotate right
             } else {
-                env.actions[3] = 0.0f;
-                env.actions[4] = 0.0f;
                 env.actions[5] = 0.0f;
             }
+            
+            // Robot 3 is always random in manual mode
+            env.actions[6] = ((float)rand() / RAND_MAX - 0.5f) * 2.0f;
+            env.actions[7] = ((float)rand() / RAND_MAX - 0.5f) * 2.0f;
+            env.actions[8] = ((float)rand() / RAND_MAX - 0.5f) * 2.0f;
         } else {
-            // Random actions for both robots
-            for (int i = 0; i < 6; i++) {
+            // Random actions for all robots
+            for (int i = 0; i < 9; i++) {
                 env.actions[i] = ((float)rand() / RAND_MAX - 0.5f) * 2.0f;
             }
         }
@@ -77,7 +88,7 @@ int main() {
         c_render(&env);
         
         // Reset if episode is done
-        if (env.terminals[0] || env.terminals[1]) {
+        if (env.terminals[0]) {
             printf("Episode finished! Goals: %.0f, Collisions: %.0f, Score: %.0f\n", 
                    env.log.goals_reached, env.log.collisions, env.log.score);
             c_reset(&env);
